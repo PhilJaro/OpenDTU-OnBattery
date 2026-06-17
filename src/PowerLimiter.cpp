@@ -346,7 +346,12 @@ void PowerLimiterClass::loop()
 
     _loadCorrectedVoltage = getLoadCorrectedVoltage();
     _batteryState = getBatteryState();
+    if (Mode::SolarOnly == _mode) {
+        _batteryState = BatteryState::NO_DISCHARGE;
+        _fromStart = false;
+    }
     _fullSolarPassThroughActive = getFullSolarPassthrough();
+
 
     DTU_LOGD("up %lu s, it is %s, next inverter restart at %d s (set to %d)",
             millis()/1000,
@@ -967,7 +972,7 @@ bool PowerLimiterClass::isSolarPassThroughEnabled() const
     // solarcharger is needed for solar passthrough
     if (!config.SolarCharger.Enabled) { return false; }
 
-    return config.PowerLimiter.SolarPassThroughEnabled;
+    return config.PowerLimiter.SolarPassThroughEnabled || (Mode::SolarOnly == _mode);
 }
 
 bool PowerLimiterClass::usesBatteryPoweredInverter() const
