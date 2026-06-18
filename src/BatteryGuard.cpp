@@ -45,6 +45,7 @@
 #include <frozen/map.h>
 #include <battery/Controller.h>
 #include <Configuration.h>
+#include <solarcharger/Controller.h>
 #include <Utils.h>
 #include <LogHelper.h>
 #include "BatteryGuard.h"
@@ -233,7 +234,11 @@ void BatteryGuardClass::slowLoop(void) {
     if (_useCurrentCompensation || _useRechargeHelper) {
 
         // read external state without holding our mutex
-        auto epochFull = Battery.getStats()->getSoCFullEpoch().value_or(0);
+        auto const batteryFullEpoch = Battery.getStats()->getSoCFullEpoch().value_or(0);
+        auto const solarState = SolarCharger.getStats()->getStateOfOperation();
+        auto const solarChargerFull = !solarState.has_value()
+            || solarState.value() == SolarChargers::Stats::StateOfOperation::Float;
+        auto const allowFullEpochFallback = batteryFullEpoch == 0 || solarChargerFull;
         time_t epochNow;
         if (!Utils::getEpoch(&epochNow, 5)) { epochNow = 0 ; }
 
@@ -248,7 +253,11 @@ void BatteryGuardClass::slowLoop(void) {
         }
 
         if (_useRechargeHelper) {
-            calculateRechargeHelper(epochFull, epochNow);
+            if (batteryFullEpoch != 0 && solarChargerFull) {
+                _lastConfirmedFullEpoch = batteryFullEpoch;
+            }
+            auto const epochFull = _lastConfirmedFullEpoch;
+            calculateRechargeHelper(epochFull, epochNow, allowFullEpochFallback);
         }
 
     } // end of unique lock
@@ -1069,7 +1078,7 @@ frozen::string const& BatteryGuardClass::gLimiterStateText(BatteryGuardClass::LS
  * Stage 2: We reduce the maximum inverter power. Change every day at 12:00
  * Stage 3: We keep the maximum start/stop-thresholds and the minimum inverter power
  */
-void BatteryGuardClass::calculateRechargeHelper(time_t const fullEpoch, time_t const nowEpoch) {
+void BatteryGuardClass::calculateRechargeHelper(time_t const fullEpoch, time_t const nowEpoch, bool const allowFallback) {
 
     if (_hState == HState::OFF) { return; }
 
@@ -1096,7 +1105,7 @@ void BatteryGuardClass::calculateRechargeHelper(time_t const fullEpoch, time_t c
     }
     if (config.BatteryGuard.UpperPowerLimit >= gUpperPowerLimitUsed()) { _configError = true; }
 
-    auto oDay = gDaysSinceLastFullyCharged(fullEpoch, nowEpoch);
+    auto oDay = gDaysSinceLastFullyCharged(fullEpoch, nowEpoch, allowFallback);
 
     // Check if there is a configuration error or local time is invalid or day is not available.
     if (_configError || (!oDay.has_value()) || (nowEpoch == 0)) {
@@ -1258,7 +1267,7 @@ bool BatteryGuardClass::isUseOfExcessiveSolarPowerAllowed(void) const {
  * Note: If the local time is not available we return std::nullopt
  *       If the time from the battery stats is not available we use the startup epoch as a fallback
  */
-std::optional<uint16_t> BatteryGuardClass::gDaysSinceLastFullyCharged(time_t epochFull, time_t epochNow) {
+std::optional<uint16_t> BatteryGuardClass::gDaysSinceLastFullyCharged(time_t epochFull, time_t epochNow, bool const allowFallback) {
     std::optional<uint16_t> oDay = std::nullopt;
 
     if (epochNow == 0) { return oDay; }
@@ -1267,6 +1276,8 @@ std::optional<uint16_t> BatteryGuardClass::gDaysSinceLastFullyCharged(time_t epo
         // the 100% SoC epoch is available, we can reset the fallback epoch
         _fallbackSoCEpoch = 0;
     } else {
+        if (!allowFallback) { return oDay; }
+
         // the 100% SoC epoch is not available, we use the now epoch as a fallback
         if (0 == _fallbackSoCEpoch) { _fallbackSoCEpoch = epochNow; }
         epochFull = _fallbackSoCEpoch;
