@@ -183,6 +183,7 @@ class BatteryGuardClass {
         bool _lastTimeTrigger = false;                      // true if the trigger was already activated within the time window.
         time_t _fallbackSoCEpoch = 0;                       // fallback epoch if the 100% SoC epoch is not available
         time_t _lastConfirmedFullEpoch = 0;                 // 100% SoC epoch accepted after charger reached float
+        bool _fullSoCPendingFloat = false;                  // true while 100% SoC waits for solar charger float
 };
 
 extern BatteryGuardClass BatteryGuard;

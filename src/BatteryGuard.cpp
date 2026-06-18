@@ -253,6 +253,7 @@ void BatteryGuardClass::slowLoop(void) {
         }
 
         if (_useRechargeHelper) {
+            _fullSoCPendingFloat = batteryFullEpoch != 0 && !solarChargerFull;
             if (batteryFullEpoch != 0 && solarChargerFull) {
                 _lastConfirmedFullEpoch = batteryFullEpoch;
             }
@@ -1441,6 +1442,8 @@ void BatteryGuardClass::serializeInfo(JsonObject const& start) const {
     recharge["soc_start_threshold"] = _oSoCStartThreshold.value_or(0.0f); // %
     recharge["soc_stop_threshold"] = _oSoCStopThreshold.value_or(0.0f); // %
     recharge["power_limit"] = _oPowerLimit.value_or(0); // W
+    recharge["full_soc_pending_float"] = _fullSoCPendingFloat;
+    recharge["full_soc_confirmed"] = _lastConfirmedFullEpoch != 0;
 
     // Internal resistance (configured and calculated)
     auto const& values = start["values"];
