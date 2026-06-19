@@ -213,6 +213,8 @@
             "E": "Effizienz (berechnet)",
             "AbsorptionVoltage": "Absorptionsspannung",
             "FloatVoltage": "Erhaltungsspannung",
+            "ReBulkVoltageOffset": "Re-Bulk-Spannungsoffset",
+            "AbsorptionReBulkVoltage": "Absorption-Re-Bulk-Schwelle",
             "SBSTemperature": "SBS Temperatur",
             "Power": "Leistung",
             "RemoteVoltage": "Remote Spannung",

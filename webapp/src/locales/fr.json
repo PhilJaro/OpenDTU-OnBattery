@@ -201,6 +201,8 @@
             "E": "Efficiency (calculated)",
             "AbsorptionVoltage": "Absorption voltage",
             "FloatVoltage": "Float voltage",
+            "ReBulkVoltageOffset": "Re-bulk voltage offset",
+            "AbsorptionReBulkVoltage": "Absorption re-bulk threshold",
             "SBSTemperature": "SBS temperature"
         },
         "section_input": "Input (Solar Panels)",
