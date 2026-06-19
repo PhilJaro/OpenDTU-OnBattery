@@ -50,6 +50,7 @@ class BatteryGuardClass {
         std::optional<float> getSoCStartThreshold(void) const;
         bool isUseOfExcessiveSolarPowerAllowed(void) const;
         float getExcessiveSolarPowerLimitFactor(void) const;
+        std::optional<float> getExcessiveSolarPowerLimitWatts(void) const;
         void serializeRTD(JsonObject const& obj) const;
 
     private:
@@ -185,6 +186,7 @@ class BatteryGuardClass {
         time_t _fallbackSoCEpoch = 0;                       // fallback epoch if the 100% SoC epoch is not available
         time_t _lastConfirmedFullEpoch = 0;                 // 100% SoC epoch accepted after charger reached float
         bool _fullSoCPendingFloat = false;                  // true while 100% SoC waits for solar charger float
+        mutable float _absorptionExcessSolarLimit = 0.0f;    // dynamic excess solar allowance while waiting for float [W]
 };
 
 extern BatteryGuardClass BatteryGuard;

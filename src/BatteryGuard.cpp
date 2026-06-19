@@ -68,7 +68,9 @@ static constexpr float MAXIMUM_V_I_TIME_STAMP_DELAY = 1000;     // 1 second
 static constexpr size_t MINIMUM_RESISTANCE_CALC = 5;            // minimum number of calculations to use the calculated resistance
 static constexpr float INVERTER_EFF = 0.95f;                    // inverter efficiency
 static constexpr size_t OUTDATED_TIME = 30 * 1000;              // 30 seconds
-static constexpr float ABSORPTION_PASSTHROUGH_MIN = 0.997f;      // no excess solar below 99.7% of absorption voltage
+static constexpr float ABSORPTION_PASSTHROUGH_MIN = 0.997f;      // proxy for absorption minus re-bulk offset (not exposed by VE.Direct)
+static constexpr float ABSORPTION_PASSTHROUGH_UP_STEP = 0.05f;   // max ramp up per calculation, relative to inverter limit
+static constexpr float ABSORPTION_PASSTHROUGH_DOWN_STEP = 0.15f; // max ramp down per calculation, relative to inverter limit
 
 BatteryGuardClass BatteryGuard; // singleton instance
 
@@ -1252,7 +1254,8 @@ std::optional<float> BatteryGuardClass::getSoCStopThreshold(void) const {
  * Note: Used to temporary limit for example 'Full Solar-Passthrough" or 'Surplus'
  */
 bool BatteryGuardClass::isUseOfExcessiveSolarPowerAllowed(void) const {
-    return getExcessiveSolarPowerLimitFactor() > 0.0f;
+    auto const limit = getExcessiveSolarPowerLimitWatts();
+    return !limit.has_value() || limit.value() > 0.0f;
 }
 
 
@@ -1261,28 +1264,65 @@ bool BatteryGuardClass::isUseOfExcessiveSolarPowerAllowed(void) const {
  * Note: Used to temporary limit for example 'Full Solar-Passthrough" or 'Surplus'
  */
 float BatteryGuardClass::getExcessiveSolarPowerLimitFactor(void) const {
-    if (!_useRechargeHelper) { return 1.0f; } // fast exit to avoid locking
+    auto const limit = getExcessiveSolarPowerLimitWatts();
+    if (!limit.has_value()) { return 1.0f; }
+
+    auto const solarOutput = SolarCharger.getStats()->getOutputPowerWatts().value_or(0.0f);
+    if (solarOutput <= 0.0f) { return limit.value() > 0.0f ? 1.0f : 0.0f; }
+    return std::min<float>(1.0f, limit.value() / solarOutput);
+}
+
+
+/*
+ * Returns the dynamic excessive solar power allowance in W, or nullopt if unrestricted.
+ * In absorption the allowance is ramped up/down proportionally to the distance
+ * from the midpoint between absorption voltage and the re-bulk proxy voltage.
+ */
+std::optional<float> BatteryGuardClass::getExcessiveSolarPowerLimitWatts(void) const {
+    if (!_useRechargeHelper) { return std::nullopt; } // fast exit to avoid locking
 
     auto const solarState = SolarCharger.getStats()->getStateOfOperation();
     auto const absorptionVoltage = SolarCharger.getStats()->getAbsorptionVoltage();
     auto const outputVoltage = SolarCharger.getStats()->getOutputVoltage();
 
-    std::shared_lock<std::shared_mutex> lock(_mutex);
+    std::unique_lock<std::shared_mutex> lock(_mutex);
 
     if (!Configuration.get().BatteryGuard.ExcessiveSolarPowerDisabled
     || ((_hState != HState::STAGE1) && (_hState != HState::STAGE2) && (_hState != HState::STAGE3))) {
-        return 1.0f;
+        _absorptionExcessSolarLimit = 0.0f;
+        return std::nullopt;
     }
 
     if (solarState != SolarChargers::Stats::StateOfOperation::Absorption || !absorptionVoltage.has_value()) {
+        _absorptionExcessSolarLimit = 0.0f;
         return 0.0f;
     }
 
+    auto const absorption = absorptionVoltage.value();
+    auto const minVoltage = absorption * ABSORPTION_PASSTHROUGH_MIN;
+    auto const targetVoltage = (absorption + minVoltage) / 2.0f;
+    auto const halfRange = (absorption - minVoltage) / 2.0f;
+    if (halfRange <= 0.0f) {
+        _absorptionExcessSolarLimit = 0.0f;
+        return 0.0f;
+    }
     auto const voltage = outputVoltage.value_or(_battVoltage);
-    auto const minVoltage = absorptionVoltage.value() * ABSORPTION_PASSTHROUGH_MIN;
-    if (voltage <= minVoltage) { return 0.0f; }
-    if (voltage >= absorptionVoltage.value()) { return 1.0f; }
-    return (voltage - minVoltage) / (absorptionVoltage.value() - minVoltage);
+    auto const upperLimit = static_cast<float>(gUpperPowerLimitUsed());
+
+    if (voltage <= minVoltage) {
+        _absorptionExcessSolarLimit = 0.0f;
+        return 0.0f;
+    }
+
+    auto const distance = std::min<float>(1.0f, std::max<float>(-1.0f, (voltage - targetVoltage) / halfRange));
+    if (distance > 0.0f) {
+        _absorptionExcessSolarLimit += upperLimit * ABSORPTION_PASSTHROUGH_UP_STEP * distance;
+    } else if (distance < 0.0f) {
+        _absorptionExcessSolarLimit += upperLimit * ABSORPTION_PASSTHROUGH_DOWN_STEP * distance;
+    }
+
+    _absorptionExcessSolarLimit = std::min<float>(upperLimit, std::max<float>(0.0f, _absorptionExcessSolarLimit));
+    return _absorptionExcessSolarLimit;
 }
 
 
