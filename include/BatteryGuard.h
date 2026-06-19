@@ -49,6 +49,8 @@ class BatteryGuardClass {
         std::optional<float> getSoCStopThreshold(void) const;
         std::optional<float> getSoCStartThreshold(void) const;
         bool isUseOfExcessiveSolarPowerAllowed(void) const;
+        float getExcessiveSolarPowerLimitFactor(void) const;
+        std::optional<float> getExcessiveSolarPowerLimitWatts(void) const;
         void serializeRTD(JsonObject const& obj) const;
 
     private:
@@ -164,12 +166,12 @@ class BatteryGuardClass {
         // Recharge Helper: private members and methods
         enum class HState : uint8_t { OFF, ERROR, START, IDLE, STAGE1, STAGE2, STAGE3 };
 
-        void calculateRechargeHelper(time_t const fullEpoch, time_t const nowEpoch);
+        void calculateRechargeHelper(time_t const fullEpoch, time_t const nowEpoch, bool const allowFallback);
         void resetRechargeHelper(void);
         bool gRechargeTimeTrigger(time_t const nowEpoch);
         bool thresholdsValid(float startMinDPL, float stopMinDPL, float startMax, float stopMax) const;
         void printRechargeReport(void) const;
-        std::optional<uint16_t> gDaysSinceLastFullyCharged(time_t epochFull, time_t epochNow);
+        std::optional<uint16_t> gDaysSinceLastFullyCharged(time_t epochFull, time_t epochNow, bool const allowFallback);
         frozen::string const& gRechargeStateText(HState const state) const;
 
         HState _hState = HState::OFF;                       // shared data, state machine
@@ -182,6 +184,9 @@ class BatteryGuardClass {
         bool _configError = false;                          // true if a configuration error was detected
         bool _lastTimeTrigger = false;                      // true if the trigger was already activated within the time window.
         time_t _fallbackSoCEpoch = 0;                       // fallback epoch if the 100% SoC epoch is not available
+        time_t _lastConfirmedFullEpoch = 0;                 // 100% SoC epoch accepted after charger reached float
+        bool _fullSoCPendingFloat = false;                  // true while 100% SoC waits for solar charger float
+        mutable float _absorptionExcessSolarLimit = 0.0f;    // dynamic excess solar allowance while waiting for float [W]
 };
 
 extern BatteryGuardClass BatteryGuard;

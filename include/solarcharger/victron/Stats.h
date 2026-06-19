@@ -19,6 +19,7 @@ public:
     std::optional<StateOfOperation> getStateOfOperation() const final;
     std::optional<float> getFloatVoltage() const final;
     std::optional<float> getAbsorptionVoltage() const final;
+    std::optional<float> getReBulkVoltageOffset() const final;
 
     void getLiveViewData(JsonVariant& root, const boolean fullUpdate, const uint32_t lastPublish) const final;
     void mqttPublish() const final;

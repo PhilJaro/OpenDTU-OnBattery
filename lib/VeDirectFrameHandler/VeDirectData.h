@@ -60,6 +60,7 @@ struct veMpptStruct : veStruct {
     std::pair<uint32_t, uint32_t> NetworkTotalDcInputPowerMilliWatts;
     std::pair<uint32_t, uint32_t> BatteryAbsorptionMilliVolt;
     std::pair<uint32_t, uint32_t> BatteryFloatMilliVolt;
+    std::pair<uint32_t, uint32_t> ReBulkVoltageOffsetMilliVolt;
     std::pair<uint32_t, uint16_t> BatteryMaximumCurrent;
     std::pair<uint32_t, uint16_t> ChargeCurrentLimit;
     std::pair<uint32_t, uint8_t> NetworkInfo;
@@ -148,6 +149,7 @@ enum class VeDirectHexRegister : uint16_t {
     TotalChargeCurrent = 0x2013,
     ChargeCurrentLimit = 0x2015,
     NetworkTotalDcInputPower = 0x2027,
+    ReBulkVoltageOffset = 0xED2E,
     BatteryMaximumCurrent = 0xEDF0,
     BatteryAbsorptionVoltage = 0xEDF7,
     BatteryFloatVoltage = 0xEDF6,

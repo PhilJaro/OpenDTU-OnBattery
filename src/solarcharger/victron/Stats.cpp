@@ -185,6 +185,19 @@ std::optional<float> Stats::getAbsorptionVoltage() const
     return std::nullopt;
 }
 
+std::optional<float> Stats::getReBulkVoltageOffset() const
+{
+    for (auto const& entry : _data) {
+        if (isStale(entry)) { continue; }
+
+        auto voltage = entry.second.ReBulkVoltageOffsetMilliVolt;
+        if (voltage.first > 0) { // only return valid and not outdated value
+            return voltage.second / 1000.0;
+        }
+    }
+    return std::nullopt;
+}
+
 bool Stats::isStale(data_map_t::value_type const& data) const
 {
     // age unknown
@@ -292,6 +305,17 @@ void Stats::populateJsonWithInstanceStats(const JsonObject &root, const VeDirect
         output["FloatVoltage"]["v"] = mpptData.BatteryFloatMilliVolt.second / 1000.0;
         output["FloatVoltage"]["u"] = "V";
         output["FloatVoltage"]["d"] = "2";
+    }
+    if (mpptData.ReBulkVoltageOffsetMilliVolt.first > 0) {
+        output["ReBulkVoltageOffset"]["v"] = mpptData.ReBulkVoltageOffsetMilliVolt.second / 1000.0;
+        output["ReBulkVoltageOffset"]["u"] = "V";
+        output["ReBulkVoltageOffset"]["d"] = "2";
+
+        if (mpptData.BatteryAbsorptionMilliVolt.first > 0) {
+            output["AbsorptionReBulkVoltage"]["v"] = std::max<int32_t>(0, mpptData.BatteryAbsorptionMilliVolt.second - mpptData.ReBulkVoltageOffsetMilliVolt.second) / 1000.0;
+            output["AbsorptionReBulkVoltage"]["u"] = "V";
+            output["AbsorptionReBulkVoltage"]["d"] = "2";
+        }
     }
 
     auto const& config = Configuration.get();
@@ -441,6 +465,7 @@ void Stats::publishMpptData(const VeDirectMpptController::data_t &currentData, c
     PUBLISH_OPT(ChargeCurrentLimit,                       "ChargeCurrentLimit",           currentData.ChargeCurrentLimit.second / 10.0);
     PUBLISH_OPT(BatteryAbsorptionMilliVolt,               "BatteryAbsorption",            currentData.BatteryAbsorptionMilliVolt.second / 1000.0);
     PUBLISH_OPT(BatteryFloatMilliVolt,                    "BatteryFloat",                 currentData.BatteryFloatMilliVolt.second / 1000.0);
+    PUBLISH_OPT(ReBulkVoltageOffsetMilliVolt,             "ReBulkVoltageOffset",          currentData.ReBulkVoltageOffsetMilliVolt.second / 1000.0);
     PUBLISH_OPT(SmartBatterySenseTemperatureMilliCelsius, "SmartBatterySenseTemperature", currentData.SmartBatterySenseTemperatureMilliCelsius.second / 1000.0);
 #undef PUBLILSH_OPT
 }

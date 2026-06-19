@@ -38,6 +38,8 @@ export interface Recharge {
     soc_start_threshold: number;
     soc_stop_threshold: number;
     power_limit: number;
+    full_soc_pending_float: boolean;
+    full_soc_confirmed: boolean;
 }
 
 export interface Limiter {
