@@ -68,7 +68,8 @@ static constexpr float MAXIMUM_V_I_TIME_STAMP_DELAY = 1000;     // 1 second
 static constexpr size_t MINIMUM_RESISTANCE_CALC = 5;            // minimum number of calculations to use the calculated resistance
 static constexpr float INVERTER_EFF = 0.95f;                    // inverter efficiency
 static constexpr size_t OUTDATED_TIME = 30 * 1000;              // 30 seconds
-static constexpr float ABSORPTION_PASSTHROUGH_MARGIN = 0.15f;    // V below absorption before blocking excess solar again
+static constexpr float ABSORPTION_PASSTHROUGH_RESUME = 0.999f;   // resume excess solar at 99.9% of absorption voltage
+static constexpr float ABSORPTION_PASSTHROUGH_STOP = 0.997f;     // stop excess solar at 99.7% of absorption voltage
 
 BatteryGuardClass BatteryGuard; // singleton instance
 
@@ -1262,15 +1263,20 @@ bool BatteryGuardClass::isUseOfExcessiveSolarPowerAllowed(void) const {
 
     if (Configuration.get().BatteryGuard.ExcessiveSolarPowerDisabled
     && ((_hState == HState::STAGE1) || (_hState == HState::STAGE2) || (_hState == HState::STAGE3))) {
-        // In absorption the battery is already held at the full-charge voltage.
-        // Allow excess solar, but stop again before voltage falls far enough to
-        // make the charger drop back to bulk.
         if (solarState == SolarChargers::Stats::StateOfOperation::Absorption && absorptionVoltage.has_value()) {
             auto const voltage = outputVoltage.value_or(_battVoltage);
-            return voltage >= (absorptionVoltage.value() - ABSORPTION_PASSTHROUGH_MARGIN);
+            auto const currentlyAllowed = _absorptionExcessSolarAllowed.load();
+            auto const factor = currentlyAllowed
+                ? ABSORPTION_PASSTHROUGH_STOP
+                : ABSORPTION_PASSTHROUGH_RESUME;
+            auto const allowed = voltage >= absorptionVoltage.value() * factor;
+            _absorptionExcessSolarAllowed.store(allowed);
+            return allowed;
         }
+        _absorptionExcessSolarAllowed.store(false);
         return false;
     }
+    _absorptionExcessSolarAllowed.store(false);
     return true;
 }
 

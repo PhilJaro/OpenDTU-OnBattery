@@ -184,6 +184,7 @@ class BatteryGuardClass {
         time_t _fallbackSoCEpoch = 0;                       // fallback epoch if the 100% SoC epoch is not available
         time_t _lastConfirmedFullEpoch = 0;                 // 100% SoC epoch accepted after charger reached float
         bool _fullSoCPendingFloat = false;                  // true while 100% SoC waits for solar charger float
+        mutable std::atomic<bool> _absorptionExcessSolarAllowed = false; // hysteresis for excess solar in absorption
 };
 
 extern BatteryGuardClass BatteryGuard;
