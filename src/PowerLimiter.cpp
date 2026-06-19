@@ -538,7 +538,7 @@ void PowerLimiterClass::unconditionalFullSolarPassthrough()
     auto solarChargerOutput = SolarCharger.getStats()->getOutputPowerWatts();
     if (solarChargerOutput) {
         targetOutput = static_cast<uint16_t>(std::max<int32_t>(0, *solarChargerOutput));
-        targetOutput = dcPowerBusToInverterAc(targetOutput);
+        targetOutput = dcPowerBusToInverterAc(targetOutput * BatteryGuard.getExcessiveSolarPowerLimitFactor());
     }
 
     _calculationBackoffMs = 1 * 1000;
@@ -836,7 +836,7 @@ uint16_t PowerLimiterClass::getSolarPassthroughPower() const
 
     // This value can be negative if a charge controller with a load output is used
     // and the load is consuming more power than the charge controller is producing.
-    return std::max<float>(0, oSolarChargerOutput.value_or(0));
+    return std::max<float>(0, oSolarChargerOutput.value_or(0)) * BatteryGuard.getExcessiveSolarPowerLimitFactor();
 }
 
 float PowerLimiterClass::getBatteryInvertersOutputAcWatts() const

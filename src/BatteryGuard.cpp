@@ -68,8 +68,7 @@ static constexpr float MAXIMUM_V_I_TIME_STAMP_DELAY = 1000;     // 1 second
 static constexpr size_t MINIMUM_RESISTANCE_CALC = 5;            // minimum number of calculations to use the calculated resistance
 static constexpr float INVERTER_EFF = 0.95f;                    // inverter efficiency
 static constexpr size_t OUTDATED_TIME = 30 * 1000;              // 30 seconds
-static constexpr float ABSORPTION_PASSTHROUGH_RESUME = 0.999f;   // resume excess solar at 99.9% of absorption voltage
-static constexpr float ABSORPTION_PASSTHROUGH_STOP = 0.997f;     // stop excess solar at 99.7% of absorption voltage
+static constexpr float ABSORPTION_PASSTHROUGH_MIN = 0.997f;      // no excess solar below 99.7% of absorption voltage
 
 BatteryGuardClass BatteryGuard; // singleton instance
 
@@ -1250,10 +1249,19 @@ std::optional<float> BatteryGuardClass::getSoCStopThreshold(void) const {
 
 /*
  * Returns true if use of excessive solar power is allowed
- * Note: Used to temporary disable for example 'Full Solar-Passthrough" or 'Surplus'
+ * Note: Used to temporary limit for example 'Full Solar-Passthrough" or 'Surplus'
  */
 bool BatteryGuardClass::isUseOfExcessiveSolarPowerAllowed(void) const {
-    if (!_useRechargeHelper) { return true; } // fast exit to avoid locking
+    return getExcessiveSolarPowerLimitFactor() > 0.0f;
+}
+
+
+/*
+ * Returns the factor for excessive solar power use (0.0 = blocked, 1.0 = unlimited).
+ * Note: Used to temporary limit for example 'Full Solar-Passthrough" or 'Surplus'
+ */
+float BatteryGuardClass::getExcessiveSolarPowerLimitFactor(void) const {
+    if (!_useRechargeHelper) { return 1.0f; } // fast exit to avoid locking
 
     auto const solarState = SolarCharger.getStats()->getStateOfOperation();
     auto const absorptionVoltage = SolarCharger.getStats()->getAbsorptionVoltage();
@@ -1261,23 +1269,20 @@ bool BatteryGuardClass::isUseOfExcessiveSolarPowerAllowed(void) const {
 
     std::shared_lock<std::shared_mutex> lock(_mutex);
 
-    if (Configuration.get().BatteryGuard.ExcessiveSolarPowerDisabled
-    && ((_hState == HState::STAGE1) || (_hState == HState::STAGE2) || (_hState == HState::STAGE3))) {
-        if (solarState == SolarChargers::Stats::StateOfOperation::Absorption && absorptionVoltage.has_value()) {
-            auto const voltage = outputVoltage.value_or(_battVoltage);
-            auto const currentlyAllowed = _absorptionExcessSolarAllowed.load();
-            auto const factor = currentlyAllowed
-                ? ABSORPTION_PASSTHROUGH_STOP
-                : ABSORPTION_PASSTHROUGH_RESUME;
-            auto const allowed = voltage >= absorptionVoltage.value() * factor;
-            _absorptionExcessSolarAllowed.store(allowed);
-            return allowed;
-        }
-        _absorptionExcessSolarAllowed.store(false);
-        return false;
+    if (!Configuration.get().BatteryGuard.ExcessiveSolarPowerDisabled
+    || ((_hState != HState::STAGE1) && (_hState != HState::STAGE2) && (_hState != HState::STAGE3))) {
+        return 1.0f;
     }
-    _absorptionExcessSolarAllowed.store(false);
-    return true;
+
+    if (solarState != SolarChargers::Stats::StateOfOperation::Absorption || !absorptionVoltage.has_value()) {
+        return 0.0f;
+    }
+
+    auto const voltage = outputVoltage.value_or(_battVoltage);
+    auto const minVoltage = absorptionVoltage.value() * ABSORPTION_PASSTHROUGH_MIN;
+    if (voltage <= minVoltage) { return 0.0f; }
+    if (voltage >= absorptionVoltage.value()) { return 1.0f; }
+    return (voltage - minVoltage) / (absorptionVoltage.value() - minVoltage);
 }
 
 
