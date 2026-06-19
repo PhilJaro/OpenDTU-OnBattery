@@ -1283,6 +1283,7 @@ std::optional<float> BatteryGuardClass::getExcessiveSolarPowerLimitWatts(void) c
 
     auto const solarState = SolarCharger.getStats()->getStateOfOperation();
     auto const absorptionVoltage = SolarCharger.getStats()->getAbsorptionVoltage();
+    auto const reBulkVoltageOffset = SolarCharger.getStats()->getReBulkVoltageOffset();
     auto const outputVoltage = SolarCharger.getStats()->getOutputVoltage();
 
     std::unique_lock<std::shared_mutex> lock(_mutex);
@@ -1299,7 +1300,10 @@ std::optional<float> BatteryGuardClass::getExcessiveSolarPowerLimitWatts(void) c
     }
 
     auto const absorption = absorptionVoltage.value();
-    auto const minVoltage = absorption * ABSORPTION_PASSTHROUGH_MIN;
+    auto const fallbackMinVoltage = absorption * ABSORPTION_PASSTHROUGH_MIN;
+    auto const minVoltage = reBulkVoltageOffset.has_value() && reBulkVoltageOffset.value() > 0.0f
+        ? std::max<float>(0.0f, absorption - reBulkVoltageOffset.value())
+        : fallbackMinVoltage;
     auto const targetVoltage = (absorption + minVoltage) / 2.0f;
     auto const halfRange = (absorption - minVoltage) / 2.0f;
     if (halfRange <= 0.0f) {

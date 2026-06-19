@@ -38,6 +38,9 @@ public:
     // absorption voltage from the first available charge controller in V
     virtual std::optional<float> getAbsorptionVoltage() const;
 
+    // re-bulk voltage offset from the first available charge controller in V
+    virtual std::optional<float> getReBulkVoltageOffset() const;
+
     // convert stats to JSON for web application live view
     virtual void getLiveViewData(JsonVariant& root, const boolean fullUpdate, const uint32_t lastPublish) const;
 

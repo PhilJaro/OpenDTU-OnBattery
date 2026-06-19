@@ -185,6 +185,19 @@ std::optional<float> Stats::getAbsorptionVoltage() const
     return std::nullopt;
 }
 
+std::optional<float> Stats::getReBulkVoltageOffset() const
+{
+    for (auto const& entry : _data) {
+        if (isStale(entry)) { continue; }
+
+        auto voltage = entry.second.ReBulkVoltageOffsetMilliVolt;
+        if (voltage.first > 0) { // only return valid and not outdated value
+            return voltage.second / 1000.0;
+        }
+    }
+    return std::nullopt;
+}
+
 bool Stats::isStale(data_map_t::value_type const& data) const
 {
     // age unknown

@@ -71,13 +71,14 @@ private:
 
     // for slow changing values we use a send time period of 4 sec
     #define HIGH_PRIO_COMMAND 1
-    std::array<VeDirectHexQueue, 11> _hexQueue {{
+    std::array<VeDirectHexQueue, 12> _hexQueue {{
          { VeDirectHexRegister::NetworkTotalDcInputPower, false, HIGH_PRIO_COMMAND, 0 },
          { VeDirectHexRegister::NetworkStatus, false, 4, 0 },
          { VeDirectHexRegister::ChargeControllerTemperature, false, 4, 0 },
          { VeDirectHexRegister::SmartBatterySenseTemperature, false, 4, 0 },
          { VeDirectHexRegister::BatteryFloatVoltage, false, 4, 0 },
          { VeDirectHexRegister::BatteryAbsorptionVoltage, false, 4, 0 },
+         { VeDirectHexRegister::ReBulkVoltageOffset, false, 4, 0 },
          { VeDirectHexRegister::ChargeCurrentLimit, false, 4, 0 },
          { VeDirectHexRegister::BatteryMaximumCurrent, false, 4, 0 },
          { VeDirectHexRegister::BatteryVoltageSense, true, 4, 0, 16 },
