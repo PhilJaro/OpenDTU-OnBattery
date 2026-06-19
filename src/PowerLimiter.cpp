@@ -199,7 +199,8 @@ void PowerLimiterClass::loop()
     // note that we can only perform unconditional full solar-passthrough or any
     // calculation at all after surviving the loop above, which ensures that we
     // have inverter stats more recent than their respective last update command
-    if (Mode::UnconditionalFullSolarPassthrough == _mode) {
+    if (Mode::UnconditionalFullSolarPassthrough == _mode
+    && BatteryGuard.isUseOfExcessiveSolarPowerAllowed()) {
         return unconditionalFullSolarPassthrough();
     }
 

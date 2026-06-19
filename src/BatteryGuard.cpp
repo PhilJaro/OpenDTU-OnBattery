@@ -68,6 +68,7 @@ static constexpr float MAXIMUM_V_I_TIME_STAMP_DELAY = 1000;     // 1 second
 static constexpr size_t MINIMUM_RESISTANCE_CALC = 5;            // minimum number of calculations to use the calculated resistance
 static constexpr float INVERTER_EFF = 0.95f;                    // inverter efficiency
 static constexpr size_t OUTDATED_TIME = 30 * 1000;              // 30 seconds
+static constexpr float ABSORPTION_PASSTHROUGH_MARGIN = 0.15f;    // V below absorption before blocking excess solar again
 
 BatteryGuardClass BatteryGuard; // singleton instance
 
@@ -1253,11 +1254,22 @@ std::optional<float> BatteryGuardClass::getSoCStopThreshold(void) const {
 bool BatteryGuardClass::isUseOfExcessiveSolarPowerAllowed(void) const {
     if (!_useRechargeHelper) { return true; } // fast exit to avoid locking
 
+    auto const solarState = SolarCharger.getStats()->getStateOfOperation();
+    auto const absorptionVoltage = SolarCharger.getStats()->getAbsorptionVoltage();
+    auto const outputVoltage = SolarCharger.getStats()->getOutputVoltage();
+
     std::shared_lock<std::shared_mutex> lock(_mutex);
 
     if (Configuration.get().BatteryGuard.ExcessiveSolarPowerDisabled
     && ((_hState == HState::STAGE1) || (_hState == HState::STAGE2) || (_hState == HState::STAGE3))) {
-         return false;
+        // In absorption the battery is already held at the full-charge voltage.
+        // Allow excess solar, but stop again before voltage falls far enough to
+        // make the charger drop back to bulk.
+        if (solarState == SolarChargers::Stats::StateOfOperation::Absorption && absorptionVoltage.has_value()) {
+            auto const voltage = outputVoltage.value_or(_battVoltage);
+            return voltage >= (absorptionVoltage.value() - ABSORPTION_PASSTHROUGH_MARGIN);
+        }
+        return false;
     }
     return true;
 }
