@@ -47,7 +47,7 @@ public:
         Normal = 0,
         Disabled = 1,
         UnconditionalFullSolarPassthrough = 2,
-        SolarOnly = 3
+        SolarPassthrough = 3
     };
 
     void setMode(Mode m) { _mode = m; _reloadConfigFlag = true; }

@@ -346,7 +346,7 @@ void PowerLimiterClass::loop()
 
     _loadCorrectedVoltage = getLoadCorrectedVoltage();
     _batteryState = getBatteryState();
-    if (Mode::SolarOnly == _mode) {
+    if (Mode::SolarPassthrough == _mode) {
         _batteryState = BatteryState::NO_DISCHARGE;
         _fromStart = false;
     }
@@ -977,7 +977,7 @@ bool PowerLimiterClass::isSolarPassThroughEnabled() const
     // solarcharger is needed for solar passthrough
     if (!config.SolarCharger.Enabled) { return false; }
 
-    return config.PowerLimiter.SolarPassThroughEnabled || (Mode::SolarOnly == _mode);
+    return config.PowerLimiter.SolarPassThroughEnabled || (Mode::SolarPassthrough == _mode);
 }
 
 bool PowerLimiterClass::usesBatteryPoweredInverter() const

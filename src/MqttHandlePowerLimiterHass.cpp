@@ -66,6 +66,10 @@ void MqttHandlePowerLimiterHassClass::publishConfig()
     publishNumber("Total Upper Power Limit", "mdi:speedometer", "config", "upper_power_limit", "upper_power_limit", "W", 0, 32767, 1);
     publishNumber("Target Power Consumption", "mdi:target", "config", "target_power_consumption", "target_power_consumption", "W", -32768, 32767, 1);
 
+    if (config.PowerMeter.Enabled) {
+        publishSensor("Power Meter Power", "mdi:meter-electric", "powermeter/powertotal", "W", "power", "measurement");
+    }
+
     if (!PowerLimiter.usesBatteryPoweredInverter()) {
         return;
     }
@@ -217,6 +221,46 @@ void MqttHandlePowerLimiterHassClass::publishBinarySensor(
     root["stat_t"] = statTopic;
     root["pl_on"] = payload_on;
     root["pl_off"] = payload_off;
+
+    auto const& config = Configuration.get();
+    if (config.Mqtt.Hass.Expire) {
+        root["exp_aft"] = config.Mqtt.PublishInterval * 3;
+    }
+
+    createDeviceInfo(root);
+
+    if (!Utils::checkJsonAlloc(root, __FUNCTION__, __LINE__)) {
+        return;
+    }
+
+    String buffer;
+    serializeJson(root, buffer);
+    publish(configTopic, buffer);
+}
+
+void MqttHandlePowerLimiterHassClass::publishSensor(
+    const char* caption, const char* icon, const char* stateTopic,
+    const char* unitOfMeasure, const char* deviceClass, const char* stateClass)
+{
+
+    String sensorId = caption;
+    sensorId.replace(" ", "_");
+    sensorId.toLowerCase();
+
+    const String configTopic = "sensor/" + MqttHandleHass.getDtuUniqueId() + "/" + sensorId + "/config";
+    const String statTopic = MqttSettings.getPrefix() + "powerlimiter/status/" + stateTopic;
+
+    JsonDocument root;
+
+    root["name"] = caption;
+    root["uniq_id"] = MqttHandleHass.getDtuUniqueId() + "_" + sensorId;
+    if (strcmp(icon, "")) {
+        root["ic"] = icon;
+    }
+    root["stat_t"] = statTopic;
+    root["unit_of_meas"] = unitOfMeasure;
+    root["dev_cla"] = deviceClass;
+    root["stat_cla"] = stateClass;
 
     auto const& config = Configuration.get();
     if (config.Mqtt.Hass.Expire) {

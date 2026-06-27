@@ -5,6 +5,7 @@
 #include "MqttSettings.h"
 #include "MqttHandlePowerLimiter.h"
 #include "PowerLimiter.h"
+#include <powermeter/Controller.h>
 #include <ctime>
 #include <string>
 #include <LogHelper.h>
@@ -93,6 +94,10 @@ void MqttHandlePowerLimiterClass::loop()
 
     MqttSettings.publish("powerlimiter/status/target_power_consumption", String(config.PowerLimiter.TargetPowerConsumption));
 
+    if (PowerMeter.isDataValid()) {
+        MqttSettings.publish("powerlimiter/status/powermeter/powertotal", String(PowerMeter.getPowerTotal()));
+    }
+
     MqttSettings.publish("powerlimiter/status/inverter_update_timeouts", String(PowerLimiter.getInverterUpdateTimeouts()));
 
     // no thresholds are relevant for setups without a battery
@@ -138,10 +143,10 @@ void MqttHandlePowerLimiterClass::onMqttCmd(MqttPowerLimiterCommand command, con
             DTU_LOGI("Power limiter unconditional full solar PT");
             _mqttCallbacks.push_back(std::bind(&PowerLimiterClass::setMode,
                         &PowerLimiter, Mode::UnconditionalFullSolarPassthrough));
-        } else if (mode == Mode::SolarOnly) {
-            DTU_LOGI("Power limiter solar-only / battery hold (MQTT override)");
+        } else if (mode == Mode::SolarPassthrough) {
+            DTU_LOGI("Power limiter solar passthrough / battery hold (MQTT override)");
             _mqttCallbacks.push_back(std::bind(&PowerLimiterClass::setMode,
-                        &PowerLimiter, Mode::SolarOnly));
+                        &PowerLimiter, Mode::SolarPassthrough));
         } else if (mode == Mode::Disabled) {
             DTU_LOGI("Power limiter disabled (override)");
             _mqttCallbacks.push_back(std::bind(&PowerLimiterClass::setMode,
