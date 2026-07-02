@@ -141,6 +141,7 @@ void Provider::pollingLoop()
         // periodic information output
         if (pollEnd - lastPrint > 30 * 1000) {
             lastPrint = pollEnd;
+            DTU_LOGI("Configured interval time: %ums, Settling time: %ums", _cfg.PollingIntervalMs, _cfg.SettlingTimeMs);
             DTU_LOGI("Average interval time: %ums, [Min: %u, Max: %u]",
                 avgIntervalTime.getAverage(), avgIntervalTime.getMin(), avgIntervalTime.getMax());
             DTU_LOGI("Average poll time: %ums, [Min: %u, Max: %u]",
@@ -161,6 +162,7 @@ void Provider::pollingLoop()
 Provider::poll_result_t Provider::poll()
 {
     JsonDocument jsonResponse;
+    auto pollStart = millis(); // used as timestamp for the data points
 
     auto prefixedError = [](uint8_t idx, char const* err) -> String {
         String res("Value ");
@@ -216,19 +218,21 @@ Provider::poll_result_t Provider::poll()
 
         if (cfg.SignInverted) { newValue *= -1; }
 
+        // Note: we use the poll start time as timestamp for the data point, because this is more safe
+        // and represents better the time when the measurement was taken
         {
             auto scopedLock = _dataCurrent.lock();
             switch (i) {
                 case 0:
-                    _dataCurrent.add<DataPointLabel::PowerL1>(newValue);
+                    _dataCurrent.add<DataPointLabel::PowerL1>(newValue, false, pollStart);
                     break;
 
                 case 1:
-                    _dataCurrent.add<DataPointLabel::PowerL2>(newValue);
+                    _dataCurrent.add<DataPointLabel::PowerL2>(newValue, false, pollStart);
                     break;
 
                 case 2:
-                    _dataCurrent.add<DataPointLabel::PowerL3>(newValue);
+                    _dataCurrent.add<DataPointLabel::PowerL3>(newValue, false, pollStart);
                     break;
 
                 default:
