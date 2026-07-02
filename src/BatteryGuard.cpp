@@ -248,11 +248,11 @@ void BatteryGuardClass::slowLoop(void) {
         auto const solarState = SolarCharger.getStats()->getStateOfOperation();
         auto const solarChargerFull = !solarState.has_value()
             || solarState.value() == SolarChargers::Stats::StateOfOperation::Float;
-        auto const allowFullEpochFallback = batteryFullEpoch == 0 || solarChargerFull;
         time_t epochNow;
         if (!Utils::getEpoch(&epochNow, 5)) { epochNow = 0 ; }
 
         std::unique_lock<std::shared_mutex> lock(_mutex);
+        auto const allowFullEpochFallback = batteryFullEpoch == 0 || solarChargerFull || _lastConfirmedFullEpoch == 0;
 
         if (_useCurrentCompensation) {
             if ((millis() - _lastOCMillis) > OUTDATED_TIME) {
