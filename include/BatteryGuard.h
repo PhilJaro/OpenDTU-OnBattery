@@ -187,8 +187,9 @@ class BatteryGuardClass : public InterfaceProviderRT {
         bool _configError = false;                          // true if a configuration error was detected
         bool _lastTimeTrigger = false;                      // true if the trigger was already activated within the time window.
         time_t _fallbackSoCEpoch = 0;                       // fallback epoch if the 100% SoC epoch is not available
-        time_t _lastConfirmedFullEpoch = 0;                 // 100% SoC epoch accepted after charger reached float
+        time_t _lastConfirmedFullEpoch = 0;                 // 100% SoC epoch accepted after charger returned to bulk
         bool _fullSoCPendingFloat = false;                  // true while 100% SoC waits for solar charger float
+        bool _fullSoCPendingBulk = false;                   // true after float until solar charger returns to bulk
         mutable float _absorptionExcessSolarLimit = 0.0f;    // dynamic excess solar allowance while waiting for float [W]
 };
 

@@ -76,6 +76,8 @@ static constexpr size_t OUTDATED_TIME = 30 * 1000;              // 30 seconds
 static constexpr float ABSORPTION_PASSTHROUGH_MIN = 0.997f;      // proxy for absorption minus re-bulk offset (not exposed by VE.Direct)
 static constexpr float ABSORPTION_PASSTHROUGH_UP_STEP = 0.05f;   // max ramp up per calculation, relative to inverter limit
 static constexpr float ABSORPTION_PASSTHROUGH_DOWN_STEP = 0.15f; // max ramp down per calculation, relative to inverter limit
+static constexpr float FLOAT_PASSTHROUGH_TARGET_OFFSET = 0.05f;  // keep float a little below the configured float voltage
+static constexpr float FLOAT_PASSTHROUGH_HALF_RANGE = 0.05f;     // +/- control range around the float target voltage
 
 BatteryGuardClass BatteryGuard; // singleton instance
 
@@ -246,13 +248,15 @@ void BatteryGuardClass::slowLoop(void) {
         // read external state without holding our mutex
         auto const batteryFullEpoch = Battery.getStats()->getSoCFullEpoch().value_or(0);
         auto const solarState = SolarCharger.getStats()->getStateOfOperation();
-        auto const solarChargerFull = !solarState.has_value()
+        auto const solarChargerFloat = !solarState.has_value()
             || solarState.value() == SolarChargers::Stats::StateOfOperation::Float;
+        auto const solarChargerBulk = solarState.has_value()
+            && solarState.value() == SolarChargers::Stats::StateOfOperation::Bulk;
         time_t epochNow;
         if (!Utils::getEpoch(&epochNow, 5)) { epochNow = 0 ; }
 
         std::unique_lock<std::shared_mutex> lock(_mutex);
-        auto const allowFullEpochFallback = batteryFullEpoch == 0 || solarChargerFull || _lastConfirmedFullEpoch == 0;
+        auto const allowFullEpochFallback = batteryFullEpoch == 0 || solarChargerFloat || _lastConfirmedFullEpoch == 0;
 
         if (_useCurrentCompensation) {
             if ((millis() - _lastOCMillis) > OUTDATED_TIME) {
@@ -263,8 +267,15 @@ void BatteryGuardClass::slowLoop(void) {
         }
 
         if (_useRechargeHelper) {
-            _fullSoCPendingFloat = batteryFullEpoch != 0 && !solarChargerFull;
-            if (batteryFullEpoch != 0 && solarChargerFull) {
+            _fullSoCPendingFloat = batteryFullEpoch != 0 && !solarChargerFloat && !_fullSoCPendingBulk;
+            if (batteryFullEpoch != 0 && solarChargerFloat && solarState.has_value()) {
+                _fullSoCPendingBulk = true;
+            }
+            if (batteryFullEpoch != 0 && (_fullSoCPendingBulk ? solarChargerBulk : solarChargerFloat)) {
+                _lastConfirmedFullEpoch = batteryFullEpoch;
+                _fullSoCPendingBulk = false;
+            } else if (batteryFullEpoch != 0 && solarChargerFloat && !solarState.has_value()) {
+                // If the charger state is unavailable we keep the previous fail-open behaviour.
                 _lastConfirmedFullEpoch = batteryFullEpoch;
             }
             auto const epochFull = _lastConfirmedFullEpoch;
@@ -1284,14 +1295,17 @@ float BatteryGuardClass::getExcessiveSolarPowerLimitFactor(void) const {
 
 /*
  * Returns the dynamic excessive solar power allowance in W, or nullopt if unrestricted.
- * In absorption the allowance is ramped up/down proportionally to the distance
- * from the midpoint between absorption voltage and the re-bulk proxy voltage.
+ * During the forced-full cycle the allowance is ramped up/down proportionally
+ * to the distance from the target voltage. In absorption this target is between
+ * absorption voltage and re-bulk proxy voltage. In float, after 100% has been
+ * seen, the target is kept slightly below float until the charger returns to bulk.
  */
 std::optional<float> BatteryGuardClass::getExcessiveSolarPowerLimitWatts(void) const {
     if (!_useRechargeHelper) { return std::nullopt; } // fast exit to avoid locking
 
     auto const solarState = SolarCharger.getStats()->getStateOfOperation();
     auto const absorptionVoltage = SolarCharger.getStats()->getAbsorptionVoltage();
+    auto const floatVoltage = SolarCharger.getStats()->getFloatVoltage();
     auto const reBulkVoltageOffset = SolarCharger.getStats()->getReBulkVoltageOffset();
     auto const outputVoltage = SolarCharger.getStats()->getOutputVoltage();
 
@@ -1303,18 +1317,28 @@ std::optional<float> BatteryGuardClass::getExcessiveSolarPowerLimitWatts(void) c
         return std::nullopt;
     }
 
-    if (solarState != SolarChargers::Stats::StateOfOperation::Absorption || !absorptionVoltage.has_value()) {
+    float targetVoltage = 0.0f;
+    float halfRange = 0.0f;
+    float lowerVoltage = 0.0f;
+
+    if (solarState == SolarChargers::Stats::StateOfOperation::Absorption && absorptionVoltage.has_value()) {
+        auto const absorption = absorptionVoltage.value();
+        auto const fallbackMinVoltage = absorption * ABSORPTION_PASSTHROUGH_MIN;
+        auto const minVoltage = reBulkVoltageOffset.has_value() && reBulkVoltageOffset.value() > 0.0f
+            ? std::max<float>(0.0f, absorption - reBulkVoltageOffset.value())
+            : fallbackMinVoltage;
+        targetVoltage = (absorption + minVoltage) / 2.0f;
+        halfRange = (absorption - minVoltage) / 2.0f;
+        lowerVoltage = minVoltage;
+    } else if (_fullSoCPendingBulk && solarState == SolarChargers::Stats::StateOfOperation::Float && floatVoltage.has_value()) {
+        targetVoltage = std::max<float>(0.0f, floatVoltage.value() - FLOAT_PASSTHROUGH_TARGET_OFFSET);
+        halfRange = FLOAT_PASSTHROUGH_HALF_RANGE;
+        lowerVoltage = std::max<float>(0.0f, targetVoltage - halfRange);
+    } else {
         _absorptionExcessSolarLimit = 0.0f;
         return 0.0f;
     }
 
-    auto const absorption = absorptionVoltage.value();
-    auto const fallbackMinVoltage = absorption * ABSORPTION_PASSTHROUGH_MIN;
-    auto const minVoltage = reBulkVoltageOffset.has_value() && reBulkVoltageOffset.value() > 0.0f
-        ? std::max<float>(0.0f, absorption - reBulkVoltageOffset.value())
-        : fallbackMinVoltage;
-    auto const targetVoltage = (absorption + minVoltage) / 2.0f;
-    auto const halfRange = (absorption - minVoltage) / 2.0f;
     if (halfRange <= 0.0f) {
         _absorptionExcessSolarLimit = 0.0f;
         return 0.0f;
@@ -1322,7 +1346,7 @@ std::optional<float> BatteryGuardClass::getExcessiveSolarPowerLimitWatts(void) c
     auto const voltage = outputVoltage.value_or(_battVoltage);
     auto const upperLimit = static_cast<float>(gUpperPowerLimitUsed());
 
-    if (voltage <= minVoltage) {
+    if (voltage <= lowerVoltage) {
         _absorptionExcessSolarLimit = 0.0f;
         return 0.0f;
     }
@@ -1519,6 +1543,7 @@ void BatteryGuardClass::serializeInfo(JsonObject const& start) const {
     recharge["soc_stop_threshold"] = _oSoCStopThreshold.value_or(0.0f); // %
     recharge["power_limit"] = _oPowerLimit.value_or(0); // W
     recharge["full_soc_pending_float"] = _fullSoCPendingFloat;
+    recharge["full_soc_pending_bulk"] = _fullSoCPendingBulk;
     recharge["full_soc_confirmed"] = _lastConfirmedFullEpoch != 0;
 
     // Internal resistance (configured and calculated)

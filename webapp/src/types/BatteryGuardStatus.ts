@@ -39,6 +39,7 @@ export interface Recharge {
     soc_stop_threshold: number;
     power_limit: number;
     full_soc_pending_float: boolean;
+    full_soc_pending_bulk: boolean;
     full_soc_confirmed: boolean;
 }
 
