@@ -138,6 +138,10 @@ void MqttHandlePowerLimiterClass::onMqttCmd(MqttPowerLimiterCommand command, con
             DTU_LOGI("Power limiter unconditional full solar PT");
             _mqttCallbacks.push_back(std::bind(&PowerLimiterClass::setMode,
                         &PowerLimiter, Mode::UnconditionalFullSolarPassthrough));
+        } else if (mode == Mode::SolarOnly) {
+            DTU_LOGI("Power limiter solar-only / battery hold (MQTT override)");
+            _mqttCallbacks.push_back(std::bind(&PowerLimiterClass::setMode,
+                        &PowerLimiter, Mode::SolarOnly));
         } else if (mode == Mode::Disabled) {
             DTU_LOGI("Power limiter disabled (override)");
             _mqttCallbacks.push_back(std::bind(&PowerLimiterClass::setMode,

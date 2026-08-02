@@ -134,6 +134,7 @@ void MqttHandlePowerLimiterHassClass::publishSelect(
     options.add("0");
     options.add("1");
     options.add("2");
+    options.add("3");
 
     createDeviceInfo(root);
 
