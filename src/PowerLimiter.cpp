@@ -790,6 +790,27 @@ uint16_t PowerLimiterClass::updateInverterLimits(uint16_t powerRequested,
 // solar charge controller(s), possibly an AC charger, as well as the battery.
 uint16_t PowerLimiterClass::calcPowerBusUsage(uint16_t powerRequested) const
 {
+    if (Battery.getStats()->getImmediateChargingRequest()) {
+        DTU_LOGD("DC power bus usage blocked by immediate charging request");
+        return 0;
+    }
+
+    // When battery discharge is not allowed, keep the battery-powered inverter
+    // running from the power currently supplied by the solar charger. This is
+    // used by normal mode between the stop and start thresholds when solar
+    // passthrough is enabled, as well as by the SolarOnly override. Limiting
+    // the requested AC power to the charger output prevents battery discharge;
+    // any solar power not used by the inverter remains available to charge it.
+    if (_batteryState == BatteryState::NO_DISCHARGE && isSolarPassThroughEnabled()) {
+        auto solarOutputDc = getSolarPassthroughPower();
+        auto solarOutputAc = dcPowerBusToInverterAc(solarOutputDc);
+        auto allowance = std::min(powerRequested, solarOutputAc);
+
+        DTU_LOGD("battery discharge blocked: granting %u/%u W DC/AC from DC power bus (requested %u W)",
+                solarOutputDc, solarOutputAc, powerRequested);
+        return allowance;
+    }
+
     // We check if the PSU is on and disable battery-powered inverters in this
     // case. The PSU should reduce power or shut down first before the
     // battery-powered inverters kick in. The only case where this is not
@@ -798,11 +819,6 @@ uint16_t PowerLimiterClass::calcPowerBusUsage(uint16_t powerRequested) const
     // will shut down as a consequence.
     if (!isFullSolarPassthroughActive() && GridCharger.getAutoPowerStatus()) {
         DTU_LOGD("DC power bus usage blocked by GridCharger auto power");
-        return 0;
-    }
-
-    if (Battery.getStats()->getImmediateChargingRequest()) {
-        DTU_LOGD("DC power bus usage blocked by immediate charging request");
         return 0;
     }
 
