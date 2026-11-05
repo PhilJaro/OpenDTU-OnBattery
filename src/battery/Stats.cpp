@@ -99,6 +99,10 @@ void Stats::getLiveViewData(JsonVariant& root) const
         addLiveViewValue(root, "nominalVoltage", *getNominalVoltage(), "V", 2);
     }
 
+    if (_fullChargeRequest.has_value()) {
+        addLiveViewTextValue(root, "fullChargeRequest", *_fullChargeRequest ? "yes" : "no");
+    }
+
     root["showIssues"] = supportsAlarmsAndWarnings();
 }
 
@@ -157,6 +161,10 @@ void Stats::mqttPublish() const
 
     if (isChargeCurrentLimitValid()) {
         MqttSettings.publish("battery/settings/chargeCurrentLimitation", String(_chargeCurrentLimit));
+    }
+
+    if (_fullChargeRequest.has_value()) {
+        MqttSettings.publish("battery/charging/fullChargeRequest", String(*_fullChargeRequest));
     }
 
     if (BatteryGuard.getCalculatedResistance().has_value()) {
