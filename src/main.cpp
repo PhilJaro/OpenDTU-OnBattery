@@ -39,6 +39,7 @@
 #include "RuntimeData.h"
 #include "BatteryGuard.h"
 #include "SurplusPower.h"
+#include "modbus/ModbusServer.h"
 
 #undef TAG
 static const char* TAG = "main";
@@ -158,6 +159,9 @@ void setup()
     BatteryGuard.init(scheduler);
     Surplus.init(scheduler);
     // ... and here (before RuntimeData)
+
+    // SunSpec/Modbus TCP server (must be after network init)
+    ModbusServer.init(scheduler);
 
     Runtime.read(); // Read runtime values from all components that are registered to read on startup
 
