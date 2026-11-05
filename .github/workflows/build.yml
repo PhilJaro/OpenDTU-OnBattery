@@ -8,6 +8,7 @@ on:
     branches:
       - master
       - development
+      - development-nico
     tags-ignore:
       - 'v**'
   pull_request:
@@ -169,7 +170,7 @@ jobs:
               body += `\n* [${art.name}.zip](https://nightly.link/${owner}/${repo}/actions/artifacts/${art.id}.zip)`;
             }
 
-            const build_run_url = `https://github.com/hoylabs/OpenDTU-OnBattery/actions/runs/${context.runId}`;
+            const build_run_url = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
 
             body += `\n\n### Notice\n`
               + `* These artifacts are ZIP files containing the factory update binary as well as the OTA update binary.\n`
@@ -225,7 +226,7 @@ jobs:
 
       - name: Build Changelog
         id: github_release
-        uses: mikepenz/release-changelog-builder-action@v6.3.0
+        uses: mikepenz/release-changelog-builder-action@v6.4.0
         with:
           failOnError: true
           commitMode: true
